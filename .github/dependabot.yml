@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # let new releases age a few days before proposing them (supply-chain safety)
+    cooldown:
+      default-days: 3
+    groups:
+      # one PR for all non-major updates; majors get their own PRs
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 isn't supported by the toolchain yet (vue-tsc, typescript-eslint)
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # keep Node types on the Node major CI runs (24)
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
