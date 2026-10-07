@@ -9,6 +9,7 @@ export default mergeConfig(
       include: ['test/**/*.test.ts'],
       coverage: {
         provider: 'v8',
+        reporter: ['text', 'html', 'lcov'],
         include: ['src/**/*.{ts,vue}'],
         exclude: ['src/main.ts', 'src/vite-env.d.ts'],
       },

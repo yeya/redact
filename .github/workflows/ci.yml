@@ -15,8 +15,18 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Typecheck, lint, format, unit tests
-        run: npm run check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - name: Unit tests with coverage
+        run: npm run test:coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # don't fail CI if Codecov is down or not set up yet
+          fail_ci_if_error: false
       - name: Install Playwright browser
         run: npx playwright install --with-deps --only-shell chromium
       - name: E2E tests

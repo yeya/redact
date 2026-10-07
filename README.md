@@ -1,5 +1,19 @@
 # Redact
 
+[![CI](https://github.com/yeya/redact/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yeya/redact/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/yeya/redact/graph/badge.svg)](https://codecov.io/gh/yeya/redact)
+[![Live demo](https://img.shields.io/badge/demo-yeya.github.io%2Fredact-5b6af9?logo=githubpages&logoColor=white)](https://yeya.github.io/redact/)
+[![License: MIT](https://img.shields.io/github/license/yeya/redact?color=blue)](LICENSE)
+[![100% client-side](https://img.shields.io/badge/privacy-100%25_client--side-4ecb71)](#privacy)
+[![i18n](https://img.shields.io/badge/i18n-עברית_|_English-informational)](src/i18n/locales)
+
+[![Vue](https://img.shields.io/github/package-json/dependency-version/yeya/redact/vue?logo=vuedotjs&logoColor=white&color=42b883)](https://vuejs.org/)
+[![TypeScript](https://img.shields.io/github/package-json/dependency-version/yeya/redact/dev/typescript?logo=typescript&logoColor=white&color=3178c6)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/github/package-json/dependency-version/yeya/redact/dev/vite?logo=vite&logoColor=white&color=646cff)](https://vite.dev/)
+[![Tested with Vitest](https://img.shields.io/badge/tested_with-Vitest-6e9f18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Tested with Playwright](https://img.shields.io/badge/e2e-Playwright-2ead33?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![Code style: Prettier](https://img.shields.io/badge/code_style-Prettier-f7b93e?logo=prettier&logoColor=black)](https://prettier.io/)
+
 **Live:** https://yeya.github.io/redact/
 
 Manual image redaction in the browser: open an image, draw rectangles over what
