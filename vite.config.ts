@@ -30,5 +30,8 @@ function contentSecurityPolicy(): Plugin {
 }
 
 export default defineConfig({
+  // Relative asset URLs: the same build works at the site root (preview, E2E)
+  // and under a subpath (GitHub Pages serves it from /redact/).
+  base: './',
   plugins: [vue(), contentSecurityPolicy()],
 });

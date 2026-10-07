@@ -1,5 +1,7 @@
 # Redact
 
+**Live:** https://yeya.github.io/redact/
+
 Manual image redaction in the browser: open an image, draw rectangles over what
 should be hidden, pick an effect per region (blur, pixelate, solid black/white,
 frosted glass), and export at full resolution as PNG, JPEG or WebP — or copy to
@@ -50,6 +52,13 @@ npm run format         # apply Prettier
 ```
 
 First E2E run: `npx playwright install --only-shell chromium`.
+
+## Deployment
+
+Every push to `main` that passes CI (typecheck, lint, format, unit and E2E
+tests) is built and deployed to GitHub Pages by `.github/workflows/ci.yml`.
+The build uses relative asset paths (`base: './'`), so it works under the
+`/redact/` subpath without configuration.
 
 ## Layout
 
