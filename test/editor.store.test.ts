@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
-import { useEditorStore } from '../src/stores/editor';
+import { useEditorStore, MIN_STRENGTH, MAX_STRENGTH, DEFAULT_STRENGTH } from '../src/stores/editor';
 import type { Region } from '../src/types';
 
 const fakeImg = { naturalWidth: 100, naturalHeight: 50, width: 100, height: 50 } as unknown as HTMLImageElement;
@@ -27,12 +27,16 @@ describe('editor store', () => {
       expect(store.history).toHaveLength(1);
       expect(store.future).toHaveLength(0);
 
-      // seed a redo entry, then a new mutation should clear it
-      store.future.push([]);
-      store.addRegion({ x: 20, y: 20, w: 5, h: 5, effect: 'blur', strength: 8 });
+      // create a redo entry, then a new mutation should clear it
+      store.undo();
+      store.redo();
+      store.undo();
+      expect(store.future).toHaveLength(1);
+      store.addRegion({ x: 0, y: 0, w: 10, h: 10, effect: 'blur', strength: 8 });
       expect(store.future).toHaveLength(0);
-      expect(store.regions).toHaveLength(2);
-      expect(store.regions[1].id).toBe(2);
+      store.addRegion({ x: 20, y: 20, w: 5, h: 5, effect: 'blur', strength: 8 });
+      // ids are never reused, even for a region that was undone
+      expect(store.regions.map((r) => r.id)).toEqual([2, 3]);
     });
   });
 
@@ -213,14 +217,15 @@ describe('editor store', () => {
       expect(store.regions[0].effect).toBe('blur');
     });
 
-    it('setStrength applies to all selected, clamps to [2,40], and is undoable', () => {
+    it('setStrength applies to all selected, clamps to [MIN,MAX], and is undoable', () => {
       addRegionAt(store, 0, 0);
       store.setStrength(99);
-      expect(store.regions[0].strength).toBe(40);
+      expect(store.regions[0].strength).toBe(MAX_STRENGTH);
       store.setStrength(1);
-      expect(store.regions[0].strength).toBe(2);
+      expect(store.regions[0].strength).toBe(MIN_STRENGTH);
+      // consecutive strength changes coalesce into a single undo step
       store.undo();
-      expect(store.regions[0].strength).toBe(40);
+      expect(store.regions[0].strength).toBe(8);
     });
 
     it('with no selection, setEffect/setStrength only update the control default', () => {
@@ -228,6 +233,131 @@ describe('editor store', () => {
       store.setStrength(20);
       expect(store.controlEffect).toBe('pixelate');
       expect(store.controlStrength).toBe(20);
+      expect(store.regions).toHaveLength(0);
+      expect(store.history).toHaveLength(0);
+    });
+  });
+
+  describe('undo granularity', () => {
+    it('a burst of setStrength calls (one slider drag) is a single undo step', () => {
+      addRegionAt(store, 0, 0);
+      const before = store.history.length;
+      for (let v = 9; v <= 30; v++) store.setStrength(v);
+      expect(store.history).toHaveLength(before + 1);
+      store.undo();
+      expect(store.regions[0].strength).toBe(8);
+    });
+
+    it('commitEdit ends the burst so the next slider drag is its own step', () => {
+      addRegionAt(store, 0, 0);
+      const before = store.history.length;
+      store.setStrength(20);
+      store.setStrength(25);
+      store.commitEdit();
+      store.setStrength(30);
+      expect(store.history).toHaveLength(before + 2);
+      store.undo();
+      expect(store.regions[0].strength).toBe(25);
+      store.undo();
+      expect(store.regions[0].strength).toBe(8);
+    });
+
+    it('a strength burst does not merge across a selection change', () => {
+      addRegionAt(store, 0, 0); // id 1
+      addRegionAt(store, 20, 20); // id 2
+      const before = store.history.length;
+      store.select(1);
+      store.setStrength(20);
+      store.select(2);
+      store.setStrength(30);
+      expect(store.history).toHaveLength(before + 2);
+    });
+
+    it('setEffect to the current value does not create an undo step', () => {
+      addRegionAt(store, 0, 0);
+      const before = store.history.length;
+      store.setEffect('blur');
+      expect(store.history).toHaveLength(before);
+    });
+
+    it('clicking a region without dragging leaves history and redo intact', () => {
+      addRegionAt(store, 0, 0);
+      addRegionAt(store, 20, 20);
+      store.undo();
+      const before = store.history.length;
+      store.select(1);
+      store.beginMoveDrag();
+      store.endDrag();
+      expect(store.history).toHaveLength(before);
+      expect(store.canRedo).toBe(true);
+    });
+
+    it('clicking a resize handle without dragging leaves history and redo intact', () => {
+      addRegionAt(store, 0, 0);
+      addRegionAt(store, 20, 20);
+      store.undo();
+      const before = store.history.length;
+      store.select(1);
+      store.beginResizeDrag('se');
+      store.endDrag();
+      expect(store.history).toHaveLength(before);
+      expect(store.canRedo).toBe(true);
+    });
+
+    it('undo during a drag aborts the drag instead of corrupting history', () => {
+      addRegionAt(store, 10, 10);
+      store.beginMoveDrag();
+      store.moveSelected(5, 5);
+      store.undo();
+      expect(store.regions).toHaveLength(1);
+      expect(store.regions[0].x).toBe(10);
+      store.moveSelected(9, 9); // stray mousemove after the abort
+      store.endDrag();
+      expect(store.regions[0].x).toBe(10);
+      expect(store.history).toHaveLength(1);
+    });
+  });
+
+  describe('clamping to the image', () => {
+    beforeEach(() => store.loadImage(fakeImg)); // 100×50
+
+    it('move keeps the whole selection inside the image, preserving layout', () => {
+      store.addRegion({ x: 10, y: 10, w: 10, h: 10, effect: 'blur', strength: 8 });
+      store.addRegion({ x: 30, y: 20, w: 10, h: 10, effect: 'blur', strength: 8 });
+      store.selectAll();
+      store.beginMoveDrag();
+      store.moveSelected(500, 500);
+      expect(store.regions.map((r) => [r.x, r.y])).toEqual([
+        [70, 30],
+        [90, 40],
+      ]);
+      store.moveSelected(-500, -500);
+      expect(store.regions.map((r) => [r.x, r.y])).toEqual([
+        [0, 0],
+        [20, 10],
+      ]);
+      store.endDrag();
+    });
+
+    it('resize stops at the image edges', () => {
+      store.addRegion({ x: 10, y: 10, w: 20, h: 20, effect: 'blur', strength: 8 });
+      store.beginResizeDrag('se');
+      store.resizeSelected(500, 500);
+      expect(store.regions[0]).toMatchObject({ x: 10, y: 10, w: 90, h: 40 });
+      store.endDrag();
+      store.beginResizeDrag('nw');
+      store.resizeSelected(-500, -500);
+      expect(store.regions[0]).toMatchObject({ x: 0, y: 0, w: 100, h: 50 });
+      store.endDrag();
+    });
+
+    it('addRegion clips a rect drawn past the edge', () => {
+      store.addRegion({ x: -5, y: 40, w: 20, h: 20, effect: 'blur', strength: 8 });
+      expect(store.regions[0]).toMatchObject({ x: 0, y: 40, w: 15, h: 10 });
+    });
+
+    it('addRegion ignores a rect entirely outside the image', () => {
+      store.addRegion({ x: 200, y: 0, w: 20, h: 20, effect: 'blur', strength: 8 });
       expect(store.regions).toHaveLength(0);
       expect(store.history).toHaveLength(0);
     });
@@ -247,7 +377,7 @@ describe('editor store', () => {
       expect(store.future).toHaveLength(0);
       expect(store.nextId).toBe(1);
       expect(store.controlEffect).toBe('blur');
-      expect(store.controlStrength).toBe(8);
+      expect(store.controlStrength).toBe(DEFAULT_STRENGTH);
     });
   });
 });

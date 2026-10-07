@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeRect, hitHandle, hitRect, resizeRect } from '../src/lib/geometry';
+import { hitHandle, hitRect, resizeRect, clipRect, clampGroupDelta, handlePoints } from '../src/lib/geometry';
 import type { Region } from '../src/types';
 
 const base = (over: Partial<Region> = {}): Region => ({
@@ -11,13 +11,6 @@ const base = (over: Partial<Region> = {}): Region => ({
   effect: 'blur',
   strength: 8,
   ...over,
-});
-
-describe('normalizeRect', () => {
-  it('orders corners into x,y,w,h', () => {
-    expect(normalizeRect(10, 20, 5, 15)).toMatchObject({ x: 5, y: 15, w: 5, h: 5 });
-    expect(normalizeRect(5, 15, 10, 20)).toMatchObject({ x: 5, y: 15, w: 5, h: 5 });
-  });
 });
 
 describe('hitHandle', () => {
@@ -101,5 +94,50 @@ describe('resizeRect', () => {
     const out = resizeRect(start, 'nw', 30, 30);
     expect(out.w).toBe(4);
     expect(out.h).toBe(4);
+  });
+});
+
+describe('handlePoints', () => {
+  it('places corners and edge midpoints', () => {
+    expect(handlePoints(10, 20, 100, 50)).toEqual({
+      nw: { x: 10, y: 20 },
+      n: { x: 60, y: 20 },
+      ne: { x: 110, y: 20 },
+      e: { x: 110, y: 45 },
+      se: { x: 110, y: 70 },
+      s: { x: 60, y: 70 },
+      sw: { x: 10, y: 70 },
+      w: { x: 10, y: 45 },
+    });
+  });
+});
+
+describe('clipRect', () => {
+  it('returns the part inside the bounds', () => {
+    expect(clipRect({ x: -5, y: 10, w: 20, h: 100 }, 50, 40)).toEqual({ x: 0, y: 10, w: 15, h: 30 });
+  });
+  it('is the identity for a rect already inside', () => {
+    expect(clipRect({ x: 1, y: 2, w: 3, h: 4 }, 50, 40)).toEqual({ x: 1, y: 2, w: 3, h: 4 });
+  });
+  it('returns null when nothing overlaps', () => {
+    expect(clipRect({ x: 60, y: 0, w: 10, h: 10 }, 50, 40)).toBeNull();
+    expect(clipRect({ x: 0, y: -20, w: 10, h: 20 }, 50, 40)).toBeNull();
+  });
+});
+
+describe('clampGroupDelta', () => {
+  const group = [
+    { x: 10, y: 10, w: 10, h: 10 },
+    { x: 30, y: 5, w: 5, h: 5 },
+  ];
+  it('passes small deltas through', () => {
+    expect(clampGroupDelta(group, 3, -2, 100, 100)).toEqual({ x: 3, y: -2 });
+  });
+  it('stops the group at each edge', () => {
+    expect(clampGroupDelta(group, 500, 500, 100, 100)).toEqual({ x: 65, y: 80 });
+    expect(clampGroupDelta(group, -500, -500, 100, 100)).toEqual({ x: -10, y: -5 });
+  });
+  it('passes the delta through for an empty group', () => {
+    expect(clampGroupDelta([], 7, 8, 10, 10)).toEqual({ x: 7, y: 8 });
   });
 });
