@@ -6,6 +6,7 @@
   --border: #2e3250;
   --accent: #5b6af9;
   --accent-hover: #717fff;
+  --accent-active: #4a58e6;
   --accent-dim: rgba(91, 106, 249, 0.15);
   --text: #e8eaf6;
   --text-dim: #7b82a8;
@@ -52,12 +53,19 @@ button {
   cursor: pointer;
   transition:
     background 0.15s,
-    border-color 0.15s;
+    border-color 0.15s,
+    transform 0.08s;
   white-space: nowrap;
   font-family: inherit;
 }
 button:hover {
   background: var(--border);
+}
+/* pressed: sink slightly and darken, so every click visibly registers */
+button:active {
+  transform: scale(0.96);
+  background: var(--surface);
+  transition-duration: 0s;
 }
 button.primary {
   background: var(--accent);
@@ -67,12 +75,18 @@ button.primary {
 button.primary:hover {
   background: var(--accent-hover);
 }
+button.primary:active {
+  background: var(--accent-active);
+}
 button.danger {
   color: var(--danger);
 }
 button.danger:hover {
   border-color: var(--danger);
   background: rgba(249, 91, 91, 0.1);
+}
+button.danger:active {
+  background: rgba(249, 91, 91, 0.22);
 }
 button:disabled {
   opacity: 0.35;

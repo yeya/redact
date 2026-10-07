@@ -117,6 +117,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   background: rgba(249, 91, 91, 0.2);
   border-color: var(--danger);
 }
+.actions button.danger:active {
+  background: rgba(249, 91, 91, 0.3);
+}
 
 .modal-enter-active,
 .modal-leave-active {
