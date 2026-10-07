@@ -1,8 +1,5 @@
-node_modules/
 dist/
 coverage/
-*.tsbuildinfo
-*.local
-.DS_Store
 test-results/
 playwright-report/
+package-lock.json
