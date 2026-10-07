@@ -1,9 +1,9 @@
+import type en from './en';
+
 export default {
-  logo: 'Redact',
   open: 'פתיחת תמונה',
   effect: 'אפקט',
   strength: 'עוצמה',
-  str: 'עוצמה',
   effects: {
     blur: 'טשטוש גאוסי',
     pixelate: 'פיקסלים',
@@ -11,6 +11,7 @@ export default {
     white: 'לבן מלא',
     frosted: 'זכוכית מעורפלת',
   },
+  weakEffectWarning: 'טשטוש ופיקסלים ניתנים לעיתים לשחזור. לטקסט רגיש, השתמש בשחור או לבן מלא.',
   multiHint: 'נבחרו — שינויים יחולו על כולם',
   undo: 'בטל',
   redo: 'בצע שוב',
@@ -31,6 +32,7 @@ export default {
   delete: 'מחק',
   emptyState: 'צייר מלבנים על התמונה כדי לסמן אזורים לטשטוש.',
   region: 'אזור {n}',
+  regionMeta: '{effect} · עוצמה {strength}',
   regionCoords: '{x}, {y} · {w}×{h} פיקסל',
   deleteRegion: 'מחק אזור זה',
   toast: {
@@ -39,6 +41,7 @@ export default {
     saved: 'נשמר כ-{fmt}',
     copied: 'הועתק ללוח ✓',
     clipboardBlocked: 'ההעתקה נחסמה — נסה להוריד במקום',
+    exportFailed: 'הייצוא נכשל — ייתכן שהתמונה גדולה מדי לדפדפן זה',
   },
   confirm: {
     discardRegions: 'טעינת תמונה חדשה תמחק את כל האזורים הנוכחיים. להמשיך?',
@@ -53,4 +56,4 @@ export default {
     en: 'English',
     he: 'עברית',
   },
-};
+} satisfies typeof en;

@@ -1,9 +1,7 @@
 export default {
-  logo: 'Redact',
   open: 'Open image',
   effect: 'Effect',
   strength: 'Strength',
-  str: 'str',
   effects: {
     blur: 'Gaussian blur',
     pixelate: 'Pixelate',
@@ -11,6 +9,7 @@ export default {
     white: 'Solid white',
     frosted: 'Frosted glass',
   },
+  weakEffectWarning: 'Blur and pixelation can sometimes be reversed. For sensitive text, use solid black or white.',
   multiHint: 'selected — changes apply to all',
   undo: 'Undo',
   redo: 'Redo',
@@ -31,6 +30,7 @@ export default {
   delete: 'Delete',
   emptyState: 'Draw rectangles on the image to mark regions for redaction.',
   region: 'Region {n}',
+  regionMeta: '{effect} · str {strength}',
   regionCoords: '{x}, {y} · {w}×{h}px',
   deleteRegion: 'Delete this region',
   toast: {
@@ -39,6 +39,7 @@ export default {
     saved: 'Saved as {fmt}',
     copied: 'Copied to clipboard ✓',
     clipboardBlocked: 'Clipboard blocked — try downloading instead',
+    exportFailed: 'Export failed — the image may be too large for this browser',
   },
   confirm: {
     discardRegions: 'Loading a new image will discard all current regions. Continue?',

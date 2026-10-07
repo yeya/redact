@@ -11,6 +11,7 @@
   --text-dim: #7b82a8;
   --danger: #f95b5b;
   --success: #4ecb71;
+  --warning: #f9b85b;
   --radius: 8px;
   --mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
@@ -49,7 +50,9 @@ button {
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
   white-space: nowrap;
   font-family: inherit;
 }

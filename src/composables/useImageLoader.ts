@@ -3,9 +3,12 @@ import { useToast } from './useToast';
 import { useConfirm } from './useConfirm';
 import i18n from '../i18n';
 
+/** One hidden file input shared by every "open image" entry point. */
+let fileInput: HTMLInputElement | null = null;
+
 /**
  * Image acquisition: file picker, drag-and-drop, and clipboard paste, all
- * funnelled through `confirmLoad` (confirm-before-discard) then `loadFile`.
+ * funnelled through `requestFile` (validate → confirm-before-discard → load).
  * Matches the original's two-tier prompt: replacing an image that already has
  * regions asks to discard; replacing an image with no regions still asks.
  * The prompt is a themed modal (via useConfirm), not the browser's alert.
@@ -16,8 +19,12 @@ export function useImageLoader() {
   const { confirm } = useConfirm();
   const t = i18n.global.t;
 
+  function isImage(file: File | undefined | null): file is File {
+    return !!file && file.type.startsWith('image/');
+  }
+
   function loadFile(file: File | undefined | null): void {
-    if (!file || !file.type.startsWith('image/')) {
+    if (!isImage(file)) {
       toast.show(t('toast.notImage'), false);
       return;
     }
@@ -34,29 +41,64 @@ export function useImageLoader() {
     img.src = url;
   }
 
-  async function confirmLoad(fn: () => void): Promise<void> {
+  /** Resolves true when it is OK to replace the current image (if any). */
+  async function confirmReplace(): Promise<boolean> {
     if (store.hasImage && store.hasRegions) {
-      const ok = await confirm({
+      return confirm({
         title: t('confirm.discardTitle'),
         message: t('confirm.discardRegions'),
         confirmLabel: t('confirm.discard'),
         danger: true,
       });
-      if (!ok) return;
-    } else if (store.hasImage) {
-      const ok = await confirm({
+    }
+    if (store.hasImage) {
+      return confirm({
         title: t('confirm.replaceTitle'),
         message: t('confirm.replaceImage'),
         confirmLabel: t('confirm.confirm'),
       });
-      if (!ok) return;
     }
-    fn();
+    return true;
   }
 
-  function openImageRequest(input: HTMLInputElement): void {
-    void confirmLoad(() => input.click());
+  /** Load a dropped/pasted file. Non-images are rejected before any prompt. */
+  async function requestFile(file: File | undefined | null): Promise<void> {
+    if (!isImage(file)) {
+      toast.show(t('toast.notImage'), false);
+      return;
+    }
+    if (await confirmReplace()) loadFile(file);
   }
 
-  return { loadFile, confirmLoad, openImageRequest };
+  function getFileInput(): HTMLInputElement {
+    if (!fileInput) {
+      fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.hidden = true;
+      fileInput.addEventListener('change', () => {
+        const input = fileInput!;
+        loadFile(input.files?.[0]);
+        input.value = '';
+      });
+      document.body.appendChild(fileInput);
+    }
+    return fileInput;
+  }
+
+  /**
+   * Confirm (if replacing), then open the system file picker. With no image
+   * loaded the picker opens synchronously, inside the click that asked for it
+   * (browsers only open pickers during a user gesture); after a confirm it
+   * opens from the dialog button's click, which is a fresh gesture.
+   */
+  async function openFilePicker(): Promise<void> {
+    if (!store.hasImage) {
+      getFileInput().click();
+      return;
+    }
+    if (await confirmReplace()) getFileInput().click();
+  }
+
+  return { loadFile, requestFile, openFilePicker };
 }

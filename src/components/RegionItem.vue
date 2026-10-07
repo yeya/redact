@@ -1,30 +1,31 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Region } from '../types';
 
 const props = defineProps<{ region: Region; index: number; selected: boolean }>();
 const emit = defineEmits<{ select: [id: number, shift: boolean]; delete: [id: number] }>();
+const { t } = useI18n();
 
-const meta = computed(() => `${props.region.effect} · str ${props.region.strength}`);
+const meta = computed(() =>
+  t('regionMeta', { effect: t(`effects.${props.region.effect}`), strength: props.region.strength }),
+);
 const coords = computed(() =>
-  `${Math.round(props.region.x)},${Math.round(props.region.y)} · ${Math.round(props.region.w)}×${Math.round(props.region.h)}px`,
+  t('regionCoords', {
+    x: Math.round(props.region.x),
+    y: Math.round(props.region.y),
+    w: Math.round(props.region.w),
+    h: Math.round(props.region.h),
+  }),
 );
 const label = computed(() => `${props.index + 1}`);
 </script>
 
 <template>
-  <div
-    class="rect-item"
-    :class="{ selected }"
-    @click="emit('select', region.id, $event.shiftKey)"
-  >
+  <div class="rect-item" :class="{ selected }" @click="emit('select', region.id, $event.shiftKey)">
     <div class="rect-item-top">
       <span class="rect-label">{{ $t('region', { n: label }) }}</span>
-      <button
-        class="rect-del"
-        :title="$t('deleteRegion')"
-        @click.stop="emit('delete', region.id)"
-      >×</button>
+      <button class="rect-del" :title="$t('deleteRegion')" @click.stop="emit('delete', region.id)">×</button>
     </div>
     <span class="rect-type">{{ meta }}</span>
     <span class="rect-coords">{{ coords }}</span>
@@ -42,7 +43,9 @@ const label = computed(() => `${props.index + 1}`);
   flex-direction: column;
   gap: 4px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 .rect-item:hover {
   border-color: var(--text-dim);

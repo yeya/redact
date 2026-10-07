@@ -41,7 +41,7 @@ export function useCanvasInteraction(canvasRef: Ref<HTMLCanvasElement | null>, s
   }
 
   function onMousedown(e: MouseEvent): void {
-    if (!store.hasImage) return;
+    if (!store.hasImage || e.button !== 0) return;
     e.preventDefault();
     dragOnCanvas = true;
     const { x, y } = getPos(e);
@@ -54,7 +54,6 @@ export function useCanvasInteraction(canvasRef: Ref<HTMLCanvasElement | null>, s
         const corner = hitHandle(x, y, r, store.scale);
         if (corner) {
           store.beginResizeDrag(corner);
-          store.mode = 'resize';
           moveStart = { x, y };
           attachWindowListeners();
           return;
@@ -67,7 +66,6 @@ export function useCanvasInteraction(canvasRef: Ref<HTMLCanvasElement | null>, s
     if (hit) {
       store.select(hit.id, shift);
       store.beginMoveDrag();
-      store.mode = 'move';
       moveStart = { x, y };
       attachWindowListeners();
       return;
@@ -75,7 +73,7 @@ export function useCanvasInteraction(canvasRef: Ref<HTMLCanvasElement | null>, s
 
     // empty canvas — start a new draw rect (deselect unless shift)
     if (!shift) store.clearSelection();
-    store.mode = 'draw';
+    store.beginDraw();
     drag.value = { x0: x, y0: y, x1: x, y1: y };
     moveStart = { x, y };
     attachWindowListeners();
@@ -122,11 +120,10 @@ export function useCanvasInteraction(canvasRef: Ref<HTMLCanvasElement | null>, s
           strength: store.controlStrength,
         });
       }
-      drag.value = null;
-    } else if (store.mode === 'move' || store.mode === 'resize') {
-      store.endDrag();
     }
-    store.mode = 'idle';
+    // also ends a draw that an undo aborted mid-drag
+    drag.value = null;
+    store.endDrag();
     detachWindowListeners();
   }
 

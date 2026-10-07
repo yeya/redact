@@ -4,7 +4,7 @@ import he from './locales/he';
 
 export type Locale = 'en' | 'he';
 
-const STORAGE_KEY = 'redact-locale';
+export const STORAGE_KEY = 'redact-locale';
 const DEFAULT_LOCALE: Locale = 'he';
 const RTL_LOCALES: Locale[] = ['he'];
 
@@ -55,10 +55,6 @@ export function setLocale(locale: Locale): void {
 export function toggleLocale(): void {
   const current = i18n.global.locale.value as Locale;
   setLocale(current === 'he' ? 'en' : 'he');
-}
-
-export function currentLocale(): Locale {
-  return i18n.global.locale.value as Locale;
 }
 
 export default i18n;

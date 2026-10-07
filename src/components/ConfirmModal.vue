@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onUnmounted, nextTick, ref } from 'vue';
+import { watch, onMounted, onUnmounted, nextTick, ref } from 'vue';
 import { useConfirm } from '../composables/useConfirm';
 import i18n from '../i18n';
 
@@ -22,6 +22,9 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault();
     cancel();
   } else if (e.key === 'Enter') {
+    // A focused button handles Enter natively (Cancel must cancel); only
+    // treat Enter as "confirm" when focus is elsewhere.
+    if (document.activeElement instanceof HTMLButtonElement) return;
     e.preventDefault();
     accept();
   }
@@ -33,7 +36,7 @@ function onBackdrop(e: MouseEvent) {
 }
 
 // Attach the keydown listener for the modal's lifetime.
-window.addEventListener('keydown', onKeydown);
+onMounted(() => window.addEventListener('keydown', onKeydown));
 onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
@@ -47,11 +50,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
           <button class="cancel" @click="cancel">
             {{ options.cancelLabel ?? t('confirm.cancel') }}
           </button>
-          <button
-            ref="confirmBtn"
-            :class="options.danger ? 'danger' : 'primary'"
-            @click="accept"
-          >
+          <button ref="confirmBtn" :class="options.danger ? 'danger' : 'primary'" @click="accept">
             {{ options.confirmLabel ?? (options.danger ? t('confirm.discard') : t('confirm.confirm')) }}
           </button>
         </div>
@@ -81,7 +80,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 2px 0 rgba(255, 255, 255, 0.02) inset;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.5),
+    0 2px 0 rgba(255, 255, 255, 0.02) inset;
 }
 .title {
   font-size: 15px;
@@ -123,7 +124,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 }
 .modal-enter-active .card,
 .modal-leave-active .card {
-  transition: transform 0.18s ease, opacity 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
 }
 .modal-enter-from,
 .modal-leave-to {

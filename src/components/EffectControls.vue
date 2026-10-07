@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useEditorStore } from '../stores/editor';
+import { useEditorStore, MIN_STRENGTH, MAX_STRENGTH, REVERSIBLE_EFFECTS } from '../stores/editor';
 import type { Effect } from '../types';
 
 const store = useEditorStore();
 
-const effectValue = computed<string>({
+const effectValue = computed<Effect>({
   get: () => store.controlEffect,
-  set: (v) => store.setEffect(v as Effect),
+  set: (v) => store.setEffect(v),
 });
 
 const strengthValue = computed<number>({
   get: () => store.controlStrength,
   set: (v) => store.setStrength(v),
 });
+
+const reversible = computed(() => REVERSIBLE_EFFECTS.includes(store.controlEffect));
 </script>
 
 <template>
@@ -26,10 +28,26 @@ const strengthValue = computed<number>({
       <option value="white">{{ $t('effects.white') }}</option>
       <option value="frosted">{{ $t('effects.frosted') }}</option>
     </select>
+    <span
+      v-if="reversible"
+      class="weak-warning"
+      role="img"
+      :title="$t('weakEffectWarning')"
+      :aria-label="$t('weakEffectWarning')"
+      >⚠</span
+    >
   </label>
   <label class="field">
     {{ $t('strength') }}
-    <input type="range" min="2" max="40" v-model.number="strengthValue" />
+    <!-- `input` updates live (coalesced into one undo step); `change` fires on
+         release and closes that step, so each slider drag is one undo. -->
+    <input
+      v-model.number="strengthValue"
+      type="range"
+      :min="MIN_STRENGTH"
+      :max="MAX_STRENGTH"
+      @change="store.commitEdit()"
+    />
     <span class="strength-num">{{ store.controlStrength }}</span>
   </label>
 </template>
@@ -55,6 +73,11 @@ select {
 }
 select:focus {
   border-color: var(--accent);
+}
+.weak-warning {
+  color: var(--warning);
+  font-size: 13px;
+  cursor: help;
 }
 input[type='range'] {
   width: 80px;

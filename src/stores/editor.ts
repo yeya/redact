@@ -1,22 +1,53 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
-import type { Effect, Region } from '../types';
+import { ref, shallowRef, computed } from 'vue';
+import type { Effect, Rect, Region } from '../types';
 import { cloneRegions } from '../types';
 import type { Handle } from '../lib/geometry';
-import { resizeRect } from '../lib/geometry';
+import { clampGroupDelta, clipRect, resizeRect } from '../lib/geometry';
 
 const HISTORY_CAP = 60;
-const MIN_STRENGTH = 2;
-const MAX_STRENGTH = 40;
+/** Strength is the pixelate block size / blur radius in IMAGE pixels. Below
+ *  ~6px, text under blur or pixelate stays legible or is recoverable. */
+export const MIN_STRENGTH = 6;
+export const MAX_STRENGTH = 40;
+export const DEFAULT_STRENGTH = 12;
+export const DEFAULT_EFFECT: Effect = 'blur';
+/** Effects that obscure rather than remove pixels, and can sometimes be reversed. */
+export const REVERSIBLE_EFFECTS: readonly Effect[] = ['blur', 'pixelate', 'frosted'];
 
-export interface DragSnapshot {
-  corner: Handle;
-  startRect: Region;
+export type EditorMode = 'idle' | 'draw' | 'move' | 'resize';
+
+/** Transient state for an in-progress move/resize drag. */
+interface DragState {
+  /** Regions as they were before the drag — becomes the undo step if anything changed. */
+  before: Region[];
+  /** The dragged region(s) at drag start; deltas are applied to these. */
+  startRects: Region[];
+  corner: Handle | null;
+}
+
+function sameRegions(a: Region[], b: Region[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((r, i) => {
+      const o = b[i];
+      return (
+        r.id === o.id &&
+        r.x === o.x &&
+        r.y === o.y &&
+        r.w === o.w &&
+        r.h === o.h &&
+        r.effect === o.effect &&
+        r.strength === o.strength
+      );
+    })
+  );
 }
 
 export const useEditorStore = defineStore('editor', () => {
   // ── state ──────────────────────────────────────────────
-  const image = ref<HTMLImageElement | null>(null);
+  // DOM element and history snapshots never need deep reactivity.
+  const image = shallowRef<HTMLImageElement | null>(null);
   const imageSize = ref({ w: 0, h: 0 });
   const scale = ref(1);
 
@@ -24,19 +55,21 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedIds = ref<number[]>([]);
   const nextId = ref(1);
 
-  const history = ref<Region[][]>([]);
-  const future = ref<Region[][]>([]);
+  const history = shallowRef<Region[][]>([]);
+  const future = shallowRef<Region[][]>([]);
 
-  const mode = ref<'idle' | 'draw' | 'move' | 'resize'>('idle');
+  const mode = ref<EditorMode>('idle');
 
   /** Toolbar widget value; doubles as default for new draws and as the editor
    *  for the current selection (mirrors the original selEffect/selStrength). */
-  const controlEffect = ref<Effect>('blur');
-  const controlStrength = ref(8);
+  const controlEffect = ref<Effect>(DEFAULT_EFFECT);
+  const controlStrength = ref(DEFAULT_STRENGTH);
 
   // transient drag state, owned by the store so action handlers can read it
-  let dragSnapshot: DragSnapshot | null = null;
-  let moveStartRects: Region[] | null = null;
+  let drag: DragState | null = null;
+  /** Key of the edit currently being coalesced into one undo step (e.g. a
+   *  slider drag). Any other mutation, selection change or undo resets it. */
+  let editGroup: string | null = null;
 
   // ── getters ────────────────────────────────────────────
   const hasImage = computed(() => image.value !== null);
@@ -45,14 +78,10 @@ export const useEditorStore = defineStore('editor', () => {
   const canRedo = computed(() => future.value.length > 0);
   const selectedCount = computed(() => selectedIds.value.length);
 
-  const selectedRegions = computed(() =>
-    regions.value.filter((r) => selectedIds.value.includes(r.id)),
-  );
+  const selectedRegions = computed(() => regions.value.filter((r) => selectedIds.value.includes(r.id)));
 
   const singleSelected = computed<Region | null>(() =>
-    selectedIds.value.length === 1
-      ? regions.value.find((r) => r.id === selectedIds.value[0]) ?? null
-      : null,
+    selectedIds.value.length === 1 ? (regions.value.find((r) => r.id === selectedIds.value[0]) ?? null) : null,
   );
 
   // ── selection helpers ──────────────────────────────────
@@ -60,37 +89,47 @@ export const useEditorStore = defineStore('editor', () => {
     return selectedIds.value.includes(id);
   }
 
-  function setSelection(ids: number[]): void {
+  function setSelectedIds(ids: number[]): void {
     selectedIds.value = ids;
+    editGroup = null;
     syncControls();
   }
 
   function clearSelection(): void {
-    selectedIds.value = [];
-    syncControls();
+    setSelectedIds([]);
   }
 
   /** Single selection → mirror the region's effect/strength into the toolbar
    *  controls. Multi/none → leave the controls at their last value (so they
    *  keep serving as the default for the next draw), matching the original. */
   function syncControls(): void {
-    if (selectedIds.value.length === 1) {
-      const r = regions.value.find((reg) => reg.id === selectedIds.value[0]);
-      if (r) {
-        controlEffect.value = r.effect;
-        controlStrength.value = r.strength;
-      }
+    const r = singleSelected.value;
+    if (r) {
+      controlEffect.value = r.effect;
+      controlStrength.value = r.strength;
     }
   }
 
   // ── history ─────────────────────────────────────────────
-  function pushHistory(): void {
-    history.value.push(cloneRegions(regions.value));
-    if (history.value.length > HISTORY_CAP) history.value.shift();
+  function pushHistory(snapshot: Region[]): void {
+    history.value = [...history.value, snapshot].slice(-HISTORY_CAP);
   }
 
-  function clearFuture(): void {
+  /**
+   * Record the current regions as an undo step, just before mutating them.
+   * Consecutive calls with the same non-null `group` collapse into the first
+   * step, so e.g. dragging the strength slider is one undo, not forty.
+   */
+  function record(group: string | null = null): void {
+    if (group !== null && group === editGroup) return;
+    pushHistory(cloneRegions(regions.value));
     future.value = [];
+    editGroup = group;
+  }
+
+  /** End the current coalesced edit; the next change starts a new undo step. */
+  function commitEdit(): void {
+    editGroup = null;
   }
 
   // ── image ───────────────────────────────────────────────
@@ -103,39 +142,59 @@ export const useEditorStore = defineStore('editor', () => {
     future.value = [];
     nextId.value = 1;
     mode.value = 'idle';
-    controlEffect.value = 'blur';
-    controlStrength.value = 8;
-    dragSnapshot = null;
-    moveStartRects = null;
+    controlEffect.value = DEFAULT_EFFECT;
+    controlStrength.value = DEFAULT_STRENGTH;
+    drag = null;
+    editGroup = null;
   }
 
   function setScale(s: number): void {
     scale.value = s;
   }
 
-  // ── region mutations ────────────────────────────────────
-  function addRegion(rect: Omit<Region, 'id'>): void {
-    pushHistory();
-    const r: Region = { ...rect, id: nextId.value++ };
-    regions.value.push(r);
-    selectedIds.value = [r.id];
-    clearFuture();
+  /** Clip to the image, or pass through untouched when no image is loaded. */
+  function clipToImage(r: Rect): Rect | null {
+    const { w, h } = imageSize.value;
+    return w > 0 && h > 0 ? clipRect(r, w, h) : r;
   }
 
-  /** Snapshot current state once at the start of a move drag (called on
-   *  mousedown). Per-mousemove `moveSelected` mutates without snapshotting. */
+  // ── region mutations ────────────────────────────────────
+  /** Add a region (clipped to the image) and select it. A rect that lies
+   *  entirely outside the image is ignored. */
+  function addRegion(rect: Omit<Region, 'id'>): void {
+    const clipped = clipToImage(rect);
+    if (!clipped) return;
+    record();
+    const r: Region = { ...rect, ...clipped, id: nextId.value++ };
+    regions.value.push(r);
+    selectedIds.value = [r.id];
+  }
+
+  /** Mark the start of a draw drag (the region is added on mouseup). */
+  function beginDraw(): void {
+    mode.value = 'draw';
+  }
+
+  /** Start a move drag of the current selection (called on mousedown). The
+   *  undo step is only recorded by `endDrag`, and only if something moved. */
   function beginMoveDrag(): void {
-    pushHistory();
-    moveStartRects = selectedRegions.value.map((r) => ({ ...r }));
+    drag = {
+      before: cloneRegions(regions.value),
+      startRects: selectedRegions.value.map((r) => ({ ...r })),
+      corner: null,
+    };
+    mode.value = 'move';
   }
 
   function moveSelected(dxImg: number, dyImg: number): void {
-    if (!moveStartRects) return;
-    for (const sr of moveStartRects) {
+    if (!drag || drag.corner) return;
+    const { w, h } = imageSize.value;
+    const d = w > 0 && h > 0 ? clampGroupDelta(drag.startRects, dxImg, dyImg, w, h) : { x: dxImg, y: dyImg };
+    for (const sr of drag.startRects) {
       const r = regions.value.find((reg) => reg.id === sr.id);
       if (r) {
-        r.x = sr.x + dxImg;
-        r.y = sr.y + dyImg;
+        r.x = sr.x + d.x;
+        r.y = sr.y + d.y;
       }
     }
   }
@@ -143,110 +202,117 @@ export const useEditorStore = defineStore('editor', () => {
   function beginResizeDrag(corner: Handle): void {
     const r = singleSelected.value;
     if (!r) return;
-    pushHistory();
-    dragSnapshot = { corner, startRect: { ...r } };
+    drag = { before: cloneRegions(regions.value), startRects: [{ ...r }], corner };
+    mode.value = 'resize';
   }
 
   function resizeSelected(dxImg: number, dyImg: number): void {
-    if (!dragSnapshot) return;
-    const r = regions.value.find((reg) => reg.id === dragSnapshot!.startRect.id);
+    if (!drag?.corner) return;
+    const start = drag.startRects[0];
+    const r = regions.value.find((reg) => reg.id === start.id);
     if (!r) return;
-    const next = resizeRect(dragSnapshot.startRect, dragSnapshot.corner, dxImg, dyImg);
+    const next = clipToImage(resizeRect(start, drag.corner, dxImg, dyImg));
+    if (!next) return;
     r.x = next.x;
     r.y = next.y;
     r.w = next.w;
     r.h = next.h;
   }
 
-  /** Commit a move/resize drag: clears the redo stack. Draw commits via
-   *  `addRegion` which clears it itself. */
+  /** Finish any drag. A move/resize that changed something becomes one undo
+   *  step (and clears redo); a plain click leaves history alone. */
   function endDrag(): void {
-    dragSnapshot = null;
-    moveStartRects = null;
-    clearFuture();
+    if (drag && !sameRegions(drag.before, regions.value)) {
+      pushHistory(drag.before);
+      future.value = [];
+      editGroup = null;
+    }
+    drag = null;
+    mode.value = 'idle';
+  }
+
+  /** Abort an in-progress move/resize, restoring the pre-drag regions. */
+  function cancelDrag(): void {
+    if (drag) regions.value = drag.before;
+    drag = null;
+    mode.value = 'idle';
   }
 
   function setEffect(effect: Effect): void {
     controlEffect.value = effect;
-    if (selectedIds.value.length === 0) return;
-    pushHistory();
-    for (const id of selectedIds.value) {
-      const r = regions.value.find((reg) => reg.id === id);
-      if (r) r.effect = effect;
-    }
-    clearFuture();
+    const targets = selectedRegions.value.filter((r) => r.effect !== effect);
+    if (targets.length === 0) return;
+    record();
+    for (const r of targets) r.effect = effect;
   }
 
   function setStrength(strength: number): void {
     const v = Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, Math.round(strength)));
     controlStrength.value = v;
-    if (selectedIds.value.length === 0) return;
-    pushHistory();
-    for (const id of selectedIds.value) {
-      const r = regions.value.find((reg) => reg.id === id);
-      if (r) r.strength = v;
-    }
-    clearFuture();
+    const targets = selectedRegions.value.filter((r) => r.strength !== v);
+    if (targets.length === 0) return;
+    record('strength');
+    for (const r of targets) r.strength = v;
   }
 
   // ── selection actions ──────────────────────────────────
   function select(id: number, shift = false): void {
-    if (shift) {
-      if (isSelected(id)) {
-        selectedIds.value = selectedIds.value.filter((x) => x !== id);
-      } else {
-        selectedIds.value = [...selectedIds.value, id];
-      }
-    } else {
-      selectedIds.value = [id];
-    }
-    syncControls();
+    if (!shift) setSelectedIds([id]);
+    else if (isSelected(id)) setSelectedIds(selectedIds.value.filter((x) => x !== id));
+    else setSelectedIds([...selectedIds.value, id]);
   }
 
   function selectAll(): void {
-    selectedIds.value = regions.value.map((r) => r.id);
-    syncControls();
+    setSelectedIds(regions.value.map((r) => r.id));
   }
 
   function deleteSelected(): void {
     if (selectedIds.value.length === 0) return;
-    pushHistory();
+    record();
     const ids = new Set(selectedIds.value);
     regions.value = regions.value.filter((r) => !ids.has(r.id));
     selectedIds.value = [];
-    clearFuture();
   }
 
   function deleteRegion(id: number): void {
-    pushHistory();
+    if (!regions.value.some((r) => r.id === id)) return;
+    record();
     regions.value = regions.value.filter((r) => r.id !== id);
     selectedIds.value = selectedIds.value.filter((x) => x !== id);
-    clearFuture();
   }
 
   function clearAll(): void {
     if (regions.value.length === 0) return;
-    pushHistory();
+    record();
     regions.value = [];
     selectedIds.value = [];
-    clearFuture();
   }
 
   // ── undo / redo ─────────────────────────────────────────
+  /** Undo the last step. During a drag, undo aborts the drag instead. */
   function undo(): void {
+    if (drag) {
+      cancelDrag();
+      return;
+    }
     if (history.value.length === 0) return;
-    future.value.push(cloneRegions(regions.value));
-    regions.value = history.value.pop()!;
+    future.value = [...future.value, cloneRegions(regions.value)];
+    regions.value = history.value[history.value.length - 1];
+    history.value = history.value.slice(0, -1);
     selectedIds.value = [];
     mode.value = 'idle';
+    editGroup = null;
   }
 
   function redo(): void {
+    if (drag) cancelDrag();
     if (future.value.length === 0) return;
-    history.value.push(cloneRegions(regions.value));
-    regions.value = future.value.pop()!;
+    pushHistory(cloneRegions(regions.value));
+    regions.value = future.value[future.value.length - 1];
+    future.value = future.value.slice(0, -1);
     selectedIds.value = [];
     mode.value = 'idle';
+    editGroup = null;
   }
 
   return {
@@ -272,25 +338,25 @@ export const useEditorStore = defineStore('editor', () => {
     singleSelected,
     // selection
     isSelected,
-    setSelection,
     clearSelection,
     select,
     selectAll,
-    syncControls,
     // history
-    pushHistory,
     undo,
     redo,
+    commitEdit,
     // image
     loadImage,
     setScale,
     // mutations
     addRegion,
+    beginDraw,
     beginMoveDrag,
     moveSelected,
     beginResizeDrag,
     resizeSelected,
     endDrag,
+    cancelDrag,
     setEffect,
     setStrength,
     deleteSelected,

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { useEditorStore } from '../stores/editor';
 import { useImageLoader } from '../composables/useImageLoader';
 import { useToast } from '../composables/useToast';
@@ -10,26 +9,14 @@ import LanguageToggle from './LanguageToggle.vue';
 import i18n from '../i18n';
 
 const store = useEditorStore();
-const { openImageRequest, loadFile } = useImageLoader();
+const { openFilePicker } = useImageLoader();
 const toast = useToast();
 const t = i18n.global.t;
 
-const fileInput = ref<HTMLInputElement | null>(null);
-
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  loadFile(input.files?.[0]);
-  input.value = '';
-}
-
-function requestOpen() {
-  if (fileInput.value) openImageRequest(fileInput.value);
-}
-
 async function doExport(fmt: ExportFormat) {
   if (!store.image) return;
-  exportImg(store.image, store.regions, fmt);
-  toast.show(t('toast.saved', { fmt: fmt.toUpperCase() }), true);
+  const ok = await exportImg(store.image, store.regions, fmt);
+  toast.show(ok ? t('toast.saved', { fmt: fmt.toUpperCase() }) : t('toast.exportFailed'), ok);
 }
 
 async function doCopy() {
@@ -43,7 +30,7 @@ async function doCopy() {
   <header>
     <div class="logo">Re<span>dact</span></div>
     <div class="toolbar">
-      <button class="primary" @click="requestOpen">
+      <button class="primary" @click="openFilePicker()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
@@ -67,7 +54,6 @@ async function doCopy() {
       <div class="sep" />
       <LanguageToggle />
     </div>
-    <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
   </header>
 </template>
 

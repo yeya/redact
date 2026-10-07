@@ -1,21 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import i18n, { setLocale, currentLocale, type Locale } from '../i18n';
+import { useI18n } from 'vue-i18n';
+import { toggleLocale } from '../i18n';
 
-const current = computed<Locale>(() => currentLocale());
-
-function toggle() {
-  setLocale(current.value === 'he' ? 'en' : 'he');
-}
+const { t, locale } = useI18n();
 </script>
 
 <template>
-  <button
-    class="lang-toggle sm"
-    :title="i18n.global.t('lang.' + (current === 'he' ? 'en' : 'he'))"
-    @click="toggle"
-  >
-    {{ current === 'he' ? 'EN' : 'עב' }}
+  <button class="lang-toggle sm" :title="t(locale === 'he' ? 'lang.en' : 'lang.he')" @click="toggleLocale()">
+    {{ locale === 'he' ? 'EN' : 'עב' }}
   </button>
 </template>
 

@@ -11,6 +11,8 @@ export interface Region {
   strength: number;
 }
 
+export type Rect = Pick<Region, 'x' | 'y' | 'w' | 'h'>;
+
 /** Deep-ish clone of a region array (regions carry no nested objects). */
 export function cloneRegions(regions: Region[]): Region[] {
   return regions.map((r) => ({ ...r }));

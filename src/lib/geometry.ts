@@ -1,4 +1,4 @@
-import type { Region } from '../types';
+import type { Rect, Region } from '../types';
 
 export const HANDLE_SIZE = 8;
 export const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const;
@@ -14,25 +14,8 @@ export function screenToImage(px: number, py: number, scale: number): Point {
   return { x: px / scale, y: py / scale };
 }
 
-/** Image pixels → screen (canvas) pixels. */
-export function imageToScreen(x: number, y: number, scale: number): Point {
-  return { x: x * scale, y: y * scale };
-}
-
-/** Normalise a drag rectangle (any two opposite corners) to {x,y,w,h}. */
-export function normalizeRect(x0: number, y0: number, x1: number, y1: number): Region {
-  return {
-    id: 0,
-    x: Math.min(x0, x1),
-    y: Math.min(y0, y1),
-    w: Math.abs(x1 - x0),
-    h: Math.abs(y1 - y0),
-    effect: 'blur',
-    strength: 8,
-  };
-}
-
-const handlePoints = (sx: number, sy: number, sw: number, sh: number): Record<Handle, Point> => {
+/** Positions of the 8 resize handles of a rect, in the rect's own units. */
+export function handlePoints(sx: number, sy: number, sw: number, sh: number): Record<Handle, Point> {
   const cx = sx + sw / 2;
   const cy = sy + sh / 2;
   return {
@@ -45,7 +28,7 @@ const handlePoints = (sx: number, sy: number, sw: number, sh: number): Record<Ha
     sw: { x: sx, y: sy + sh },
     w: { x: sx, y: cy },
   };
-};
+}
 
 /**
  * Hit-test the 8 resize handles of a single selected region. `px,py` are in
@@ -82,12 +65,7 @@ export function hitHandle(
 export function hitRect(px: number, py: number, regions: Region[], scale: number): Region | null {
   for (let i = regions.length - 1; i >= 0; i--) {
     const r = regions[i];
-    if (
-      px >= r.x * scale &&
-      px <= (r.x + r.w) * scale &&
-      py >= r.y * scale &&
-      py <= (r.y + r.h) * scale
-    ) {
+    if (px >= r.x * scale && px <= (r.x + r.w) * scale && py >= r.y * scale && py <= (r.y + r.h) * scale) {
       return r;
     }
   }
@@ -99,16 +77,47 @@ export function hitRect(px: number, py: number, regions: Region[], scale: number
  * space deltas. `n`/`s` adjust the top edge + height; `w`/`e` adjust the left
  * edge + width. Width/height clamp at 4 image px (matches the original).
  */
-export function resizeRect(
-  start: Region,
-  corner: Handle,
-  dx: number,
-  dy: number,
-): Pick<Region, 'x' | 'y' | 'w' | 'h'> {
+export function resizeRect(start: Rect, corner: Handle, dx: number, dy: number): Rect {
   let { x: rx, y: ry, w: rw, h: rh } = start;
-  if (corner.includes('n')) { ry = start.y + dy; rh = start.h - dy; }
-  if (corner.includes('s')) { rh = start.h + dy; }
-  if (corner.includes('w')) { rx = start.x + dx; rw = start.w - dx; }
-  if (corner.includes('e')) { rw = start.w + dx; }
+  if (corner.includes('n')) {
+    ry = start.y + dy;
+    rh = start.h - dy;
+  }
+  if (corner.includes('s')) {
+    rh = start.h + dy;
+  }
+  if (corner.includes('w')) {
+    rx = start.x + dx;
+    rw = start.w - dx;
+  }
+  if (corner.includes('e')) {
+    rw = start.w + dx;
+  }
   return { x: rx, y: ry, w: Math.max(4, rw), h: Math.max(4, rh) };
+}
+
+/** Intersect a rect with the `[0,bw]×[0,bh]` image bounds; null if nothing is left. */
+export function clipRect(r: Rect, bw: number, bh: number): Rect | null {
+  const x0 = Math.max(0, r.x);
+  const y0 = Math.max(0, r.y);
+  const x1 = Math.min(bw, r.x + r.w);
+  const y1 = Math.min(bh, r.y + r.h);
+  if (x1 <= x0 || y1 <= y0) return null;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/**
+ * Clamp a move delta so every rect in the group stays inside the image. The
+ * group moves as one, so the rects keep their layout relative to each other.
+ */
+export function clampGroupDelta(rects: Rect[], dx: number, dy: number, bw: number, bh: number): Point {
+  if (rects.length === 0) return { x: dx, y: dy };
+  const minX = Math.min(...rects.map((r) => r.x));
+  const minY = Math.min(...rects.map((r) => r.y));
+  const maxX = Math.max(...rects.map((r) => r.x + r.w));
+  const maxY = Math.max(...rects.map((r) => r.y + r.h));
+  return {
+    x: Math.min(Math.max(dx, -minX), bw - maxX),
+    y: Math.min(Math.max(dy, -minY), bh - maxY),
+  };
 }
