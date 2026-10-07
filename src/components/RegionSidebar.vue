@@ -47,7 +47,7 @@ function onDelete(id: number) {
 
 <style scoped>
 .sidebar {
-  width: 230px;
+  width: 250px;
   flex-shrink: 0;
   background: var(--surface);
   border-inline-start: 1px solid var(--border);

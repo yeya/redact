@@ -16,6 +16,15 @@
 
 **Live:** https://yeya.github.io/redact/
 
+![Redact: an account page with the avatar pixelated, email and phone blurred, and the card number blacked out](docs/screenshot-en.png)
+
+<details>
+<summary>Hebrew (RTL) interface</summary>
+
+![The same page in the Hebrew right-to-left interface](docs/screenshot-he.png)
+
+</details>
+
 Manual image redaction in the browser: open an image, draw rectangles over what
 should be hidden, pick an effect per region (blur, pixelate, solid black/white,
 frosted glass), and export at full resolution as PNG, JPEG or WebP — or copy to
@@ -63,6 +72,7 @@ npm test               # unit/component tests (Vitest + jsdom)
 npm run test:coverage  # …with a coverage report in coverage/
 npm run test:e2e       # Playwright against the production build
 npm run format         # apply Prettier
+npm run screenshots    # regenerate docs/screenshot-{en,he}.png
 ```
 
 First E2E run: `npx playwright install --only-shell chromium`.

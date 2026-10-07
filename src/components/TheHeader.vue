@@ -50,7 +50,13 @@ async function doCopy() {
       <button :disabled="!store.hasImage" @click="doExport('png')">↓ {{ $t('export.png') }}</button>
       <button :disabled="!store.hasImage" @click="doExport('jpg')">↓ {{ $t('export.jpg') }}</button>
       <button :disabled="!store.hasImage" @click="doExport('webp')">↓ {{ $t('export.webp') }}</button>
-      <button :disabled="!store.hasImage" @click="doCopy()">⎘ {{ $t('export.copy') }}</button>
+      <button :disabled="!store.hasImage" @click="doCopy()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="9" y="9" width="12" height="12" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+        {{ $t('export.copy') }}
+      </button>
       <div class="sep" />
       <LanguageToggle />
     </div>
